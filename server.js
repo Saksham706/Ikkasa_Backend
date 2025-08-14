@@ -22,17 +22,21 @@ app.use("/api/csv", csvRoutes);
 app.use("/api/shopify", shopifyRoutes);
 app.use("/api/auth", authRoutes);
 
+// MongoDB connection
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => console.log("MongoDB connected"))
+.catch(err => console.error(err));
 
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB connected"))
-  .catch(err => console.error(err));
+// ✅ Only listen when running locally
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 4000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
-
-const PORT = process.env.PORT || 4000;
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-
+// ✅ Always export for Vercel
 export default app;
