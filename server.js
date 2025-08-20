@@ -9,30 +9,44 @@ import authRoutes from "./routes/auth.js";
 
 dotenv.config();
 
+
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.get("/", (req, res) => {
-  res.send("API is running...");
+app.use((req, res, next) => {
+  console.log('Got request:', req.method, req.url);
+  next();
 });
 
+app.get('/', (req, res) => res.send('Hello world'));
+
+
+// API ROUTES
 app.use("/api/orders", orderRoutes);
 app.use("/api/csv", csvRoutes);
 app.use("/api/shopify", shopifyRoutes);
 app.use("/api/auth", authRoutes);
 
+// CENTRAL ERROR HANDLER
+app.use((err, req, res, next) => {
+  console.error(err.stack || err.message);
+  res.status(500).json({ error: err.message || "Server Error" });
+});
 
-mongoose.connect(process.env.MONGO_URI)
+// MongoDB connection
+mongoose.connect(process.env.MONGO_URI || "mongodb://localhost:27017/Ikkasa_Admin")
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.error(err));
 
+mongoose.connection.on('error', err => {
+  console.error('MongoDB error:', err);
+});
 
-const PORT = process.env.PORT || 4000;
-
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
 
 export default app;

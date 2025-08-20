@@ -2,21 +2,18 @@ import { parseCSV } from "../utils/csvParser.js";
 import Order from "../models/Order.js";
 import { calcVolumetricWeight } from "../utils/calcVolWeight.js";
 
-// Upload CSV & save orders
-export const uploadCSV = async (req, res) => {
+export const uploadCSV = async (req, res, next) => {
   try {
     const rows = await parseCSV(req.file.path);
 
     const ordersData = rows.map(row => ({
       orderId: row["Order ID"],
-      orderDate: row["Date"],
+      orderDate: new Date(row["Date"]),
       customerName: row["Full Name"],
       customerPhone: row["Phone Number"],
       customerEmail: row["Email Address"],
       customerAddress: row["Full Address"],
-      products: [
-        { productName: row["Product Name"], quantity: Number(row["QTY"]) }
-      ],
+      products: [{ productName: row["Product Name"], quantity: Number(row["QTY"]) }],
       deadWeight: Number(row["Dead Weight"]),
       length: Number(row["Length"]),
       breadth: Number(row["Breadth"]),
@@ -29,63 +26,67 @@ export const uploadCSV = async (req, res) => {
       status: "PENDING"
     }));
 
-    // 1️⃣ Extract all orderIds from CSV
+    // Get all existing orderIds; only insert new ones
     const orderIds = ordersData.map(o => o.orderId);
+    const existingOrders = await Order.find({ orderId: { $in: orderIds } }, "orderId");
 
-    // 2️⃣ Check if any of them already exist in DB
-    const existingOrders = await Order.find({ orderId: { $in: orderIds } });
+    const existingSet = new Set(existingOrders.map(o => o.orderId));
+    const nonDuplicateOrders = ordersData.filter(o => !existingSet.has(o.orderId));
 
-    if (existingOrders.length > 0) {
-      return res.status(409).json({
-        error: `Duplicate orders found: ${existingOrders.map(o => o.orderId).join(", ")}`
-      });
+    if (nonDuplicateOrders.length === 0) {
+      return res.status(409).json({ error: "All orders in CSV already exist." });
     }
 
-    // 3️⃣ Insert only if no duplicates
-    const savedOrders = await Order.insertMany(ordersData);
+    const savedOrders = await Order.insertMany(nonDuplicateOrders);
     res.status(201).json({
-      message: `${savedOrders.length} orders saved successfully.`,
+      message: `${savedOrders.length} new orders saved successfully.`,
       savedOrders
     });
-
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 };
 
-
-// Get all orders
-export const getOrders = async (req, res) => {
+export const getOrders = async (req, res, next) => {
   try {
-    const orders = await Order.find().sort({ createdAt: -1 });
-    res.json(orders);
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 20);
+    const orders = await Order.find()
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+    const total = await Order.countDocuments();
+    res.json({ total, page, limit, orders });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 };
 
-// Update order by ID
-export const updateOrder = async (req, res) => {
+export const updateOrder = async (req, res, next) => {
   try {
-    const updated = await Order.findByIdAndUpdate(
+    if (req.body.length && req.body.breadth && req.body.height) {
+      req.body.volumetricWeight = calcVolumetricWeight(
+        req.body.length, req.body.breadth, req.body.height
+      );
+    }
+    const updatedOrder = await Order.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     );
-    if (!updated) return res.status(404).json({ error: "Order not found" });
-    res.json(updated);
+    if (!updatedOrder) return res.status(404).json({ error: "Order not found" });
+    res.json(updatedOrder);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 };
 
-// Delete order
-export const deleteOrder = async (req, res) => {
+export const deleteOrder = async (req, res, next) => {
   try {
-    const deleted = await Order.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ error: "Order not found" });
+    const deletedOrder = await Order.findByIdAndDelete(req.params.id);
+    if (!deletedOrder) return res.status(404).json({ error: "Order not found" });
     res.json({ message: "Order deleted successfully" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 };
