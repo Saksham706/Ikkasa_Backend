@@ -1,69 +1,80 @@
 import mongoose from "mongoose";
 
 const orderProductSchema = new mongoose.Schema({
-  id: String,
-  productId: String,
-  variantId: String,
   productName: { type: String, required: true },
   quantity: { type: Number, required: true },
-  price: Number,
-  sku: String,
-  vendor: String,
-  fulfillmentStatus: String,
 });
 
-const orderSchema = new mongoose.Schema({
-  shopifyId: { type: String, unique: true, sparse: true },
-  orderId: { type: String, required: true, unique: true },
-  orderName: String,
-  orderDate: { type: Date, default: Date.now },
-  processedAt: Date,
-  updatedAt: Date,
+const returnTrackingHistorySchema = new mongoose.Schema({
+  status: { type: String, required: true },
+  timestamp: { type: Date, default: Date.now },
+});
 
-  customerName: String,
-  customerPhone: String,
-  customerEmail: String,
-  customerAddress: String,
-  billingAddress: String,
+const orderSchema = new mongoose.Schema(
+  {
+    shopifyId: { type: String, unique: true, sparse: true },
+    orderId: { type: String, unique: true, sparse: true },
+    orderDate: { type: Date, default: Date.now },
 
-  products: [orderProductSchema],
+    awb: { type: String },
 
-  deadWeight: Number,
-  length: Number,
-  breadth: Number,
-  height: Number,
-  volumetricWeight: Number,
+    customerName: { type: String },
+    customerPhone: { type: String },
+    customerEmail: { type: String },
+    customerAddress: { type: String },
+    city: { type: String },
+    state: { type: String },
+    pincode: { type: String },
 
-  amount: { type: Number, default: 0 },
-  subtotalPrice: Number,
-  totalTax: Number,
-  totalDiscounts: Number,
-  totalShipping: Number,
+    products: [orderProductSchema],
 
-  paymentMode: String,
-  financialStatus: String,
-  fulfillmentStatus: String,
+    deadWeight: { type: Number },
+    length: { type: Number },
+    breadth: { type: Number },
+    height: { type: Number },
+    volumetricWeight: { type: Number },
 
-  vendorName: String,
-  pickupAddress: String,
-  status: String,
+    amount: { type: Number, default: 0 },
+    paymentMode: { type: String, default: "" },
 
-  cancelled: Boolean,
-  cancelledAt: Date,
-  cancelReason: String,
+    cgst: { type: Number },
+    sgst: { type: Number },
+    igst: { type: Number },
+    hsnCode: { type: String },
+    gstinNumber: { type: String },
+    category: { type: String },
+    unitPrice: { type: Number },
 
-  tags: String,
-  note: String,
-  currency: { type: String, default: "INR" },
-  presentmentCurrency: { type: String, default: "INR" },
+    vendorName: { type: String },
+    pickupAddress: { type: String },
+    pickupCity: { type: String },
+    pickupState: { type: String },
+    pickupPincode: { type: String },
+    returnLabel1: { type: String },
+    returnLabel2: { type: String },
+    serviceTier: { type: String },
 
-  customer: mongoose.Schema.Types.Mixed,
-  shippingLines: Array,
-  taxLines: Array,
-  discountCodes: Array,
-  discountApplications: Array,
-  refunds: Array,
-  transactions: Array,
-}, { timestamps: true });
+    invoiceReference: { type: String },
+
+    ekartResponse: { type: Object },
+
+    status: { type: String, default: "New" },
+
+    returnTracking: {
+      currentStatus: { type: String, default: "" },
+      history: [returnTrackingHistorySchema],
+      ekartTrackingId: { type: String, default: "" },
+    },
+  },
+  { timestamps: true }
+);
+
+// Pre-save middleware to ensure status is never empty or null
+orderSchema.pre("save", function (next) {
+  if (!this.status || this.status.trim() === "") {
+    this.status = "New";
+  }
+  next();
+});
 
 export default mongoose.model("Order", orderSchema);

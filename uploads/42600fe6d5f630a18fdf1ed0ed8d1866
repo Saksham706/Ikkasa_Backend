@@ -1,3 +1,0 @@
-Order ID,Date,Full Name,Phone Number,Email Address,Full Address,Product Name,QTY,Dead Weight,Length,Breadth,Height,Amount,Payment Mode,Vendor Name,Pickup Address
-ORD003,08-08-2025,Jane Smith,9876543210,jane@example.com,"456 Maple Street, City",Product A,2,2.5,40,30,15,2500,Prepaid,Vendor XYZ,789 Vendor Lane
-ORD005,08-08-2025,John Doe,9876543210,john@example.com,"123 Main Street, City",Product B,1,1.5,30,20,10,1500,COD,Vendor ABC,456 Vendor Street

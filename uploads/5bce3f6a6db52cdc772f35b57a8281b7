@@ -1,3 +1,0 @@
-products.quantity,deadWeight,length,breadth,height,volumetricWeight,amount,paymentMode,vendorName,pickupAddress,status,customerName,customerPhone,customerEmail,customerAddress
-2,2.5,40,30,15,3.6,2500,Prepaid,Vendor XYZ,"789 Vendor Lane","PENDING",Jane Smith,9876543210,jane@example.com,"456 Maple Street, City"
-1,1.5,30,20,10,1.2,1500,COD,Vendor ABC,"456 Vendor Street","PENDING",John Doe,9876543210,john@example.com,"123 Main Street, City"

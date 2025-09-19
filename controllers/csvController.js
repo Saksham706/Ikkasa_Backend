@@ -1,92 +1,103 @@
-import { parseCSV } from "../utils/csvParser.js";
+import fs from "fs";
+import csvParser from "csv-parser";
 import Order from "../models/Order.js";
 import { calcVolumetricWeight } from "../utils/calcVolWeight.js";
 
-export const uploadCSV = async (req, res, next) => {
+export const uploadAndMergeCSV = async (req, res) => {
   try {
-    const rows = await parseCSV(req.file.path);
-
-    const ordersData = rows.map(row => ({
-      orderId: row["Order ID"],
-      orderDate: new Date(row["Date"]),
-      customerName: row["Full Name"],
-      customerPhone: row["Phone Number"],
-      customerEmail: row["Email Address"],
-      customerAddress: row["Full Address"],
-      products: [{ productName: row["Product Name"], quantity: Number(row["QTY"]) }],
-      deadWeight: Number(row["Dead Weight"]),
-      length: Number(row["Length"]),
-      breadth: Number(row["Breadth"]),
-      height: Number(row["Height"]),
-      volumetricWeight: calcVolumetricWeight(row["Length"], row["Breadth"], row["Height"]),
-      amount: Number(row["Amount"]),
-      paymentMode: row["Payment Mode"],
-      vendorName: row["Vendor Name"],
-      pickupAddress: row["Pickup Address"],
-      status: "PENDING"
-    }));
-
-    // Get all existing orderIds; only insert new ones
-    const orderIds = ordersData.map(o => o.orderId);
-    const existingOrders = await Order.find({ orderId: { $in: orderIds } }, "orderId");
-
-    const existingSet = new Set(existingOrders.map(o => o.orderId));
-    const nonDuplicateOrders = ordersData.filter(o => !existingSet.has(o.orderId));
-
-    if (nonDuplicateOrders.length === 0) {
-      return res.status(409).json({ error: "All orders in CSV already exist." });
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: "CSV file is required" });
     }
 
-    const savedOrders = await Order.insertMany(nonDuplicateOrders);
-    res.status(201).json({
-      message: `${savedOrders.length} new orders saved successfully.`,
-      savedOrders
-    });
-  } catch (err) {
-    next(err);
-  }
-};
+    const results = [];
 
-export const getOrders = async (req, res, next) => {
-  try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.max(1, parseInt(req.query.limit) || 20);
-    const orders = await Order.find()
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit);
-    const total = await Order.countDocuments();
-    res.json({ total, page, limit, orders });
-  } catch (err) {
-    next(err);
-  }
-};
+    fs.createReadStream(req.file.path)
+      .pipe(csvParser())
+      .on("data", (row) => results.push(row))
+      .on("end", async () => {
+        try {
+          // Use Promise.all to run many updates in parallel for better performance
+          const updatePromises = results.map(async (row) => {
+            const orderId = row["Order no"]?.toString().trim();
+            if (!orderId) return null;
 
-export const updateOrder = async (req, res, next) => {
-  try {
-    if (req.body.length && req.body.breadth && req.body.height) {
-      req.body.volumetricWeight = calcVolumetricWeight(
-        req.body.length, req.body.breadth, req.body.height
-      );
-    }
-    const updatedOrder = await Order.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
-    if (!updatedOrder) return res.status(404).json({ error: "Order not found" });
-    res.json(updatedOrder);
-  } catch (err) {
-    next(err);
-  }
-};
+            const length = row["length (CM)"] ? parseFloat(row["length (CM)"]) : undefined;
+            const breadth = row["width (CM)"] ? parseFloat(row["width (CM)"]) : undefined;
+            const height = row["height (CM)"] ? parseFloat(row["height (CM)"]) : undefined;
 
-export const deleteOrder = async (req, res, next) => {
-  try {
-    const deletedOrder = await Order.findByIdAndDelete(req.params.id);
-    if (!deletedOrder) return res.status(404).json({ error: "Order not found" });
-    res.json({ message: "Order deleted successfully" });
+           const updateData = {
+              awb: row["AWB"] || undefined,
+              customerName: row["Customer Name"] || undefined,
+              customerPhone: row["mobile"] || undefined,
+              customerAddress: row["Address"] || undefined,
+              city: row["City"] || undefined,
+              state: row["State"] || undefined,
+              pincode: row["Pincode"] || undefined,
+              deadWeight: row["Weight"] ? parseFloat(row["Weight"]) : undefined,
+              length,
+              breadth,
+              height,
+              volumetricWeight:
+                length && breadth && height
+                  ? calcVolumetricWeight(length, breadth, height)
+                  : undefined,
+              products: row["product Name"]
+                ? [{ productName: row["product Name"], quantity: parseInt(row["Box QTY"]) || 1 }]
+                : undefined,
+              amount: row["Package amount"] ? parseFloat(row["Package amount"]) : undefined,
+              paymentMode: row["COD amount"] && parseFloat(row["COD amount"]) > 0 ? "COD" : "PREPAID",
+              cgst: row["CGST"] ? parseFloat(row["CGST"]) : undefined,
+              sgst: row["SGST"] ? parseFloat(row["SGST"]) : undefined,
+              igst: row["IGST"] ? parseFloat(row["IGST"]) : undefined,
+              hsnCode: row["hsn_code"] || undefined,
+              gstinNumber: row["GSTIN Number"] || undefined,
+              category: row["Category"] || undefined,
+              unitPrice: row["Unit Price"] ? parseFloat(row["Unit Price"]) : undefined,
+
+              // Set pickup fields to Pickup Facility Name if present,
+              // else default to customer fields
+              pickupAddress: row["Pickup Facility Name"] || row["Address"] || undefined,
+              pickupCity: row["Pickup City"] || row["City"] || undefined,
+              pickupState: row["Pickup State"] || row["State"] || undefined,
+              pickupPincode: row["Pickup Pincode"] || row["Pincode"] || undefined,
+
+              returnLabel1: row["Return Label Line 1"] || undefined,
+              returnLabel2: row["Return Label Line 2"] || undefined,
+              serviceTier: row["ServiceTier"] || undefined,
+              invoiceReference: row["invoice_reference"] || undefined,
+            };
+
+
+            // Remove undefined fields
+            Object.keys(updateData).forEach(
+              (key) => updateData[key] === undefined && delete updateData[key]
+            );
+
+            const updated = await Order.findOneAndUpdate(
+              { orderId },
+              { $set: updateData },
+              { new: true }
+            );
+
+            return updated;
+          });
+
+          // Await all updates complete and filter out nulls
+          const updatedOrders = (await Promise.all(updatePromises)).filter(Boolean);
+
+          fs.unlinkSync(req.file.path);
+
+          return res.json({
+            success: true,
+            updatedOrders,
+            count: updatedOrders.length,
+          });
+        } catch (err) {
+          console.error("CSV merge error:", err);
+          return res.status(500).json({ success: false, error: err.message });
+        }
+      });
   } catch (err) {
-    next(err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 };

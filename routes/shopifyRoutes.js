@@ -10,19 +10,16 @@ import {
 
 const router = express.Router();
 
-// Route to sync orders from Shopify
+// Shopify Sync
 router.get("/sync-orders", syncOrders);
 
-// CRUD routes for orders
+// Get all orders
 router.get("/orders", getOrders);
+
+// CRUD
 router.post("/orders", createOrder);
 router.get("/orders/:id", getOrderById);
 router.put("/orders/:id", updateOrder);
 router.delete("/orders/:id", deleteOrder);
-
-// Test route (optional)
-router.get("/test", (req, res) => {
-  res.send("Shopify test route working.");
-});
 
 export default router;

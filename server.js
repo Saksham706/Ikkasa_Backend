@@ -7,65 +7,40 @@ import orderRoutes from "./routes/orderRoutes.js";
 import csvRoutes from "./routes/csvRoutes.js";
 import shopifyRoutes from "./routes/shopifyRoutes.js";
 import authRoutes from "./routes/auth.js";
+import ekartRoutes from './routes/ekartRoutes.js';
 
-import { ApolloServer } from "@apollo/server";
-import { expressMiddleware } from "@as-integrations/express4";
-
-import { typeDefs } from "./schema/typeDefs.js";
-import { resolvers } from "./schema/resolvers.js";
 
 dotenv.config();
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
-app.use((req, res, next) => {
-  console.log("Got request:", req.method, req.url);
-  next();
+app.get("/", (req, res) => {
+  res.send("API is running...");
 });
 
-// REST API routes
 app.use("/api/orders", orderRoutes);
 app.use("/api/csv", csvRoutes);
 app.use("/api/shopify", shopifyRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/ekart", ekartRoutes);
 
-app.get("/", (req, res) => res.send("REST API works!"));
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => {
+    console.error("MongoDB connection error:", err.message);
+    process.exit(1);
+  });
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error(err.stack || err.message);
-  res.status(500).json({ error: err.message || "Server Error" });
-});
-
-// MongoDB connection
-mongoose
-  .connect(process.env.MONGO_URI || "mongodb://localhost:27017/Ikkasa_Admin", {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch((err) => console.error("❌ MongoDB connection error:", err));
-
-mongoose.connection.on("error", (err) => {
-  console.error("MongoDB error:", err);
-});
-
-// Apollo Server setup
-const server = new ApolloServer({ typeDefs, resolvers });
-await server.start();
-
-app.use(
-  "/graphql",
-  cors(),
-  express.json(),
-  expressMiddleware(server)
-);
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}/graphql`);
-});
+// Start server (local dev)
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 4000;
+  app.listen(PORT, () => {
+    console.log(`Server running locally on port ${PORT}`);
+  });
+}
 
 export default app;
